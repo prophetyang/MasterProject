@@ -1,0 +1,127 @@
+diff -Nrup iptables-1.3.6-old/extensions/libipt_MIRROR.c iptables-1.3.6-new/extensions/libipt_MIRROR.c
+--- iptables-1.3.6-old/extensions/libipt_MIRROR.c	2006-09-29 00:40:31.000000000 +0800
++++ iptables-1.3.6-new/extensions/libipt_MIRROR.c	2007-01-19 02:15:20.000000000 +0800
+@@ -6,17 +6,21 @@
+ 
+ #include <iptables.h>
+ #include <linux/netfilter_ipv4/ip_tables.h>
++#include <linux/netfilter_ipv4/ipt_MIRROR.h>
+ 
+ /* Function which prints out usage message. */
+ static void
+ help(void)
+ {
+-	printf(
+-"MIRROR target v%s takes no options\n",
+-IPTABLES_VERSION);
++	printf("--msinf #, eth#\n");
++	printf("--mdinf #, eth#\n");
++	printf("--mdrop, drop packet after mirror done\n");
+ }
+ 
+ static struct option opts[] = {
++	{"msinf", 1, 0, '1'},
++	{"mdinf", 1, 0, '2'},
++	{"mdrop", 0, 0, '3'},
+ 	{ 0 }
+ };
+ 
+@@ -24,6 +28,8 @@ static struct option opts[] = {
+ static void
+ init(struct ipt_entry_target *t, unsigned int *nfcache)
+ {
++	struct ipt_mirror_info *minfo = (struct ipt_mirror_info *)t->data;
++	minfo->dropflag = 0x00;
+ }
+ 
+ /* Function which parses command options; returns true if it
+@@ -33,25 +39,85 @@ parse(int c, char **argv, int invert, un
+       const struct ipt_entry *entry,
+       struct ipt_entry_target **target)
+ {
+-	return 0;
++	unsigned int ifid;
++	struct ipt_mirror_info *minfo = (struct ipt_mirror_info *)(*target)->data;
++	switch(c){
++		case '1':
++			if (*flags & MIRROR_SINF){
++				exit_error(PARAMETER_PROBLEM,
++                                   "iptables MIRROR target: sinf has specified\n");
++			}
++			
++			if (strlen(optarg)<6){
++				strcpy(minfo->sinf, optarg);
++				*flags |= MIRROR_SINF;
++			}else{
++				exit_error(PARAMETER_PROBLEM,
++                                   "iptables MIRROR target: sinf string length is too long\n");
++			}
++			break;	
++		case '2':
++			if (*flags & MIRROR_DINF){
++				exit_error(PARAMETER_PROBLEM,
++                                   "iptables MIRROR target: dinf has specified\n");
++			}
++			if (strlen(optarg)<6){
++				strcpy(minfo->dinf, optarg);
++				*flags |= MIRROR_DINF;
++			}else{
++				exit_error(PARAMETER_PROBLEM,
++                                   "iptables MIRROR target: dinf string length is too long\n");
++			}
++			break;
++		case '3':
++			if (*flags & MIRROR_DROP){
++				exit_error(PARAMETER_PROBLEM,
++                                   "iptables MIRROR target: drop has specified\n");
++			}
++			minfo->dropflag = 0x01;
++			*flags |= MIRROR_DROP;
++			break;
++		default:
++			exit_error(PARAMETER_PROBLEM,
++                                  "iptables MIRROR target: no such parameter %s\n", argv[optind-1]);
++			break;
++	}
++	return 1;
+ }
+ 
+ static void
+ final_check(unsigned int flags)
+ {
++	if (! (flags & MIRROR_SINF)){
++		exit_error(PARAMETER_PROBLEM,
++                     "iptables MIRROR target: msinf doesn't specify\n");
++	}
++	if (! (flags & MIRROR_DINF)){
++		exit_error(PARAMETER_PROBLEM,
++                     "iptables MIRROR target: mdinf doesn't specify\n");
++	}
++}
++
++static void
++print(const struct ipt_ip *ip,
++      const struct ipt_entry_target *target)
++{
++	const struct ipt_mirror_info *minfo =
++		(const struct ipt_mirror_info *)target->data;
++	printf("msinf: %s, mdinf: %s, dropflag: %d\n",  minfo->sinf, minfo->dinf, minfo->dropflag);
+ }
+ 
+ static struct iptables_target mirror = {
+ 	.next		= NULL,
+ 	.name		= "MIRROR",
+ 	.version	= IPTABLES_VERSION,
+-	.size		= IPT_ALIGN(0),
+-	.userspacesize	= IPT_ALIGN(0),
++	.size		= IPT_ALIGN(sizeof(struct ipt_mirror_info)),
++	.userspacesize	= IPT_ALIGN(sizeof(struct ipt_mirror_info)),
+  	.help		= &help,
+ 	.init		= &init,
+  	.parse		= &parse,
+ 	.final_check 	= &final_check,
+-	.print		= NULL,
++	.print		= &print,
+ 	.save		= NULL,
+ 	.extra_opts	= opts
+ };
